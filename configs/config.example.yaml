@@ -1,0 +1,33 @@
+app_name: auth-server
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 10s
+  write_timeout: 10s
+
+database:
+  url: postgres://user:password@localhost:5432/authdb?sslmode=disable
+  max_connections: 10
+  max_conn_idle: 30m
+  max_conn_life: 2h
+
+jwt:
+  signing_key: super-secret-key
+  access_ttl: 15m
+  refresh_ttl: 720h
+  issuer: auth-server
+  allowed_aud:
+    - web
+    - mobile
+  clock_skew: 1m
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+limiter:
+  requests: 5
+  window: 1m
+  identifier: ip
