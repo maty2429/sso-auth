@@ -14,20 +14,22 @@ import (
 )
 
 type AuthService struct {
-	userRepo  ports.UserRepository
-	tokenRepo ports.TokenRepository
-	jwtSecret []byte
+	userRepo    ports.UserRepository
+	tokenRepo   ports.TokenRepository
+	projectRepo ports.ProjectRepository
+	jwtSecret   []byte
 }
 
-func NewAuthService(userRepo ports.UserRepository, tokenRepo ports.TokenRepository, jwtSecret string) *AuthService {
+func NewAuthService(userRepo ports.UserRepository, tokenRepo ports.TokenRepository, projectRepo ports.ProjectRepository, jwtSecret string) *AuthService {
 	return &AuthService{
-		userRepo:  userRepo,
-		tokenRepo: tokenRepo,
-		jwtSecret: []byte(jwtSecret),
+		userRepo:    userRepo,
+		tokenRepo:   tokenRepo,
+		projectRepo: projectRepo,
+		jwtSecret:   []byte(jwtSecret),
 	}
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
+func (s *AuthService) Login(ctx context.Context, email, password, projectCode string) (string, string, error) {
 	// 1. Buscar usuario
 	user, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
@@ -42,13 +44,19 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		return "", "", errors.New("invalid credentials")
 	}
 
-	// 3. Generar Access Token (JWT)
-	accessToken, err := s.generateAccessToken(user)
+	// 3. Verificar membresía en el proyecto
+	roleCode, _, err := s.projectRepo.GetMemberRole(ctx, user.ID.String(), projectCode)
+	if err != nil {
+		return "", "", errors.New("no access to this project")
+	}
+
+	// 4. Generar Access Token (JWT) con Rol
+	accessToken, err := s.generateAccessToken(user, roleCode)
 	if err != nil {
 		return "", "", err
 	}
 
-	// 4. Generar Refresh Token (Opaco)
+	// 5. Generar Refresh Token (Opaco)
 	refreshTokenStr := uuid.New().String()
 	refreshTokenHash, _ := bcrypt.GenerateFromPassword([]byte(refreshTokenStr), bcrypt.DefaultCost)
 
@@ -58,7 +66,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		ExpiresAt: time.Now().Add(24 * 7 * time.Hour), // 7 días
 	}
 
-	// 5. Guardar Refresh Token
+	// 6. Guardar Refresh Token
 	if err := s.tokenRepo.SaveRefreshToken(ctx, refreshToken); err != nil {
 		return "", "", err
 	}
@@ -106,12 +114,13 @@ func (s *AuthService) ValidateToken(tokenString string) (*domain.User, error) {
 	return &domain.User{ID: uid}, nil
 }
 
-func (s *AuthService) generateAccessToken(user *domain.User) (string, error) {
+func (s *AuthService) generateAccessToken(user *domain.User, roleCode int) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":   user.ID.String(),
-		"email": user.Email,
-		"exp":   time.Now().Add(15 * time.Minute).Unix(),
-		"iat":   time.Now().Unix(),
+		"sub":       user.ID.String(),
+		"email":     user.Email,
+		"role_code": roleCode,
+		"exp":       time.Now().Add(15 * time.Minute).Unix(),
+		"iat":       time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

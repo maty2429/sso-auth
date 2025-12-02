@@ -8,9 +8,6 @@ import (
 	"sso/internal/adapters/repository"
 	"sso/internal/core/service"
 	"sso/pkg/db"
-
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -20,7 +17,7 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
-	// 2. Conectar a Base de Datos
+	// 2. Conectar a Base de Datos (Pool de conexiones)
 	dbPool, err := db.Connect(cfg.DBSource)
 	if err != nil {
 		log.Fatalf("Error connecting to DB: %v", err)
@@ -28,27 +25,23 @@ func main() {
 	defer dbPool.Close()
 
 	// 3. Inicializar Capas (Inyección de Dependencias)
-	// Repositorio (SQLC + Adapters)
-	postgresRepo := repository.NewPostgresRepo(dbPool)
+	// CAPA DE DATOS: Repositorio (SQLC)
+	// Nota: PostgresRepo implementa tanto UserRepository como TokenRepository
+	repo := repository.NewPostgresRepo(dbPool)
 
-	// Servicio (Lógica de Negocio)
-	authService := service.NewAuthService(postgresRepo, postgresRepo, cfg.JWTSecret) // PostgresRepo implements both User and Token repositories
+	// CAPA DE LÓGICA: Servicio
+	// Inyectamos el repo tres veces porque cumple las tres interfaces (User, Token, Project)
+	// Nota: Necesitamos actualizar NewAuthService para aceptar ProjectRepository
+	authService := service.NewAuthService(repo, repo, repo, cfg.JWTSecret)
 
-	// Handler (Gin)
+	// CAPA DE TRANSPORTE: Handler
 	authHandler := handler.NewAuthHandler(authService)
 
-	// 4. Configurar Router (Gin)
-	r := gin.Default()
-
-	// Configurar CORS
-	r.Use(cors.Default())
-
-	// Rutas Públicas
-	r.POST("/login", authHandler.Login)
-	r.POST("/register", authHandler.Register)
+	// 4. Inicializar Router (Aquí es donde limpiamos el main)
+	r := handler.NewRouter(authHandler)
 
 	// 5. Correr Servidor
-	log.Printf("Server starting on %s", cfg.Port)
+	log.Printf("🚀 Server starting on port %s", cfg.Port)
 	if err := r.Run(cfg.Port); err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}

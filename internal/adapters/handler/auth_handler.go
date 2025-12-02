@@ -20,8 +20,9 @@ func NewAuthHandler(authService ports.AuthService) *AuthHandler {
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required"`
+	ProjectCode string `json:"project_code" binding:"required"`
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -31,7 +32,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	accessToken, refreshToken, err := h.authService.Login(c.Request.Context(), req.Email, req.Password)
+	accessToken, refreshToken, err := h.authService.Login(c.Request.Context(), req.Email, req.Password, req.ProjectCode)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
