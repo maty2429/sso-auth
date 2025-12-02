@@ -1,0 +1,17 @@
+version: "2"
+sql:
+  - schema: "migrations"                     # Dónde están tus CREATE TABLE
+    queries: "internal/adapters/repository/queries" # Dónde están tus SELECT/INSERT
+    engine: "postgresql"
+    gen:
+      go:
+        package: "dbrepo"                    # El nombre del paquete Go generado
+        out: "internal/adapters/repository/dbrepo" # Dónde guardar los archivos .go
+        
+        # AJUSTES VITALES PARA TU PROYECTO
+        sql_package: "pgx/v5"                # Usaremos el driver pgx (el más rápido)
+        
+        emit_json_tags: true                 # Agrega `json:"..."` a los structs
+        emit_prepared_queries: false         # True si usas PGBouncer, False por defecto
+        emit_interface: true                 # ¡CRUCIAL! Genera una interface 'Querier' para poder hacer Mocks y Tests
+        emit_exact_table_names: false        # False = singulariza (users -> User)
